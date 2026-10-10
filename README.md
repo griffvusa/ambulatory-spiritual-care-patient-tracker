@@ -6,7 +6,7 @@ A patient tracking app for a hospital spiritual care / chaplaincy team's Ambulat
 
 Epic doesn't reliably preserve ambulatory spiritual care appointments. This tool gives coordinators a place to own that data: track where each patient is in the process, log every appointment, and pull reports without touching Epic.
 
-## Two flavors
+## Two flavors  jason is a good son   typing something else 
 
 **Electron app** (primary) -- a self-contained `.exe` that runs on locked-down Windows hospital PCs with no installation required. React frontend, SQLite database, bundled Chromium.
 
