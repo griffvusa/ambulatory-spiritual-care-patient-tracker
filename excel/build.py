@@ -133,8 +133,10 @@ def build_workbook(output_path=None, src_dir=None):
     output_path = os.path.abspath(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    if os.path.exists(output_path):
-        os.remove(output_path)
+    # Standing rule: a build never destroys the workbook it replaces. The existing
+    # file is renamed into dist/backups/ (git-ignored) and, once the new workbook
+    # is built, its data is loaded into it with the in-app import.
+    previous_path = _archive_existing(output_path)
 
     app = None
     wb = None
@@ -170,11 +172,65 @@ def build_workbook(output_path=None, src_dir=None):
         _configure_workbook(wb)
         _save_workbook(wb, output_path)
         print(f'Built: {output_path}')
+        if previous_path:
+            _carry_over_data(wb, previous_path)
     finally:
         if wb is not None:
             wb.close()
         if app is not None:
             app.quit()
+
+
+def _archive_existing(output_path):
+    """Rename an existing workbook at output_path into a git-ignored backups
+    folder next to it (dist/backups/<name>-YYYYMMDD-HHMMSS.xlsm) instead of
+    deleting it. Returns the new path, or None if there was nothing to archive.
+    Raises a clear error if the file is open in Excel (the rename is refused).
+    """
+    if not os.path.exists(output_path):
+        return None
+    backups = os.path.join(os.path.dirname(output_path), 'backups')
+    os.makedirs(backups, exist_ok=True)
+    base = os.path.splitext(os.path.basename(output_path))[0]
+    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    dest = os.path.join(backups, f'{base}-{stamp}.xlsm')
+    n = 2
+    while os.path.exists(dest):
+        dest = os.path.join(backups, f'{base}-{stamp}-{n}.xlsm')
+        n += 1
+    try:
+        os.replace(output_path, dest)
+    except PermissionError as e:
+        raise SystemExit(
+            f'Cannot rename the existing workbook -- is it open in Excel?\n  {output_path}\n'
+            f'Close it and run the build again. (Nothing was changed.)') from e
+    print(f'Existing workbook archived to: {dest}')
+    return dest
+
+
+def _carry_over_data(wb, previous_path):
+    """Load the archived workbook's data into the freshly built one, using the
+    same import the app's Admin > Import from previous file uses (merges by
+    column name, so it also upgrades older layouts), then save."""
+    app = wb.app.api  # the Excel.Application COM object
+    # The import writes to the (protected) UI sheets through VBA; that needs the
+    # UserInterfaceOnly flag, which ThisWorkbook.Workbook_Open normally re-applies
+    # each session and which a build session doesn't have after _protect_sheet.
+    for name in UI_SHEETS:
+        wb.sheets[name].api.Protect(DrawingObjects=True, Contents=True, Scenarios=True,
+                                    UserInterfaceOnly=True, AllowFiltering=True, AllowSorting=True)
+    report = app.Run(f"'{wb.name}'!modUpgrade.UpgradeFromWorkbookPath", previous_path)
+    print('Loading existing data into the new workbook:')
+    for line in str(report).splitlines():
+        if line.strip():
+            print('  ' + line.strip())
+    if str(report).startswith(('Import failed', "That file doesn't look like")):
+        print('WARNING: existing data was NOT loaded. Your previous workbook is safe at:\n'
+              f'  {previous_path}')
+        sys.exit(2)
+    _configure_workbook(wb)
+    wb.save()
+    print('Existing data loaded.')
 
 
 def _setup_sheets(wb):

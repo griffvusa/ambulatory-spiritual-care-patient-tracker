@@ -22,3 +22,4 @@ excel/tests/__pycache__/
 # Working data workbooks and Excel lock files -- never commit patient data
 excel/dist/*-new.xlsm
 excel/dist/~$*
+excel/dist/backups/
