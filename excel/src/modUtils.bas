@@ -167,8 +167,9 @@ Public Sub SetSetting(key As String, value As String)
     ws.Cells(newRow, 2).Value = value
 End Sub
 
-' Returns active _data_lov values for a category, sorted by sort_order ascending.
-Public Function ActiveLovValues(category As String) As Collection
+' Returns active _data_lov values for a category, sorted by sort_order ascending,
+' or alphabetically (case-insensitive) when alphabetical is True.
+Public Function ActiveLovValues(category As String, Optional alphabetical As Boolean = False) As Collection
     Dim result As New Collection
     Dim ws As Worksheet: Set ws = DataSheet("_data_lov")
     Dim last As Long: last = LastDataRow(ws)
@@ -197,7 +198,13 @@ Public Function ActiveLovValues(category As String) As Collection
     Dim j As Long, tmp As Long
     For i = 1 To n - 1
         For j = 1 To n - i
-            If sorts(order(j)) > sorts(order(j + 1)) Then
+            Dim needSwap As Boolean
+            If alphabetical Then
+                needSwap = (StrComp(values(order(j)), values(order(j + 1)), vbTextCompare) > 0)
+            Else
+                needSwap = (sorts(order(j)) > sorts(order(j + 1)))
+            End If
+            If needSwap Then
                 tmp = order(j): order(j) = order(j + 1): order(j + 1) = tmp
             End If
         Next j
@@ -209,13 +216,32 @@ Public Function ActiveLovValues(category As String) As Collection
 End Function
 
 ' Fills a ComboBox with active _data_lov values for the given category.
-Public Sub PopulateLovCombo(cbo As MSForms.ComboBox, category As String)
-    Dim values As Collection: Set values = ActiveLovValues(category)
+' pinnedFirst is an optional comma-separated list of values (e.g. "English,Spanish")
+' moved to the top of the list in that order; any that aren't active are skipped.
+Public Sub PopulateLovCombo(cbo As MSForms.ComboBox, category As String, _
+                            Optional alphabetical As Boolean = False, Optional pinnedFirst As String = "")
+    Dim values As Collection: Set values = ActiveLovValues(category, alphabetical)
     cbo.Clear
     Dim v As Variant
     For Each v In values
         cbo.AddItem CStr(v)
     Next v
+
+    If pinnedFirst = "" Then Exit Sub
+    Dim names() As String: names = Split(pinnedFirst, ",")
+    Dim k As Long, i As Long, target As Long
+    target = 0
+    For k = 0 To UBound(names)
+        For i = target To cbo.ListCount - 1
+            If StrComp(CStr(cbo.List(i)), Trim(names(k)), vbTextCompare) = 0 Then
+                Dim nm As String: nm = CStr(cbo.List(i))
+                cbo.RemoveItem i
+                cbo.AddItem nm, target
+                target = target + 1
+                Exit For
+            End If
+        Next i
+    Next k
 End Sub
 
 ' Returns the _data_lov row id matching category+value (case-insensitive), or 0.
@@ -242,6 +268,19 @@ Public Function LovValueForId(id As Long) As String
     Dim r As Long: r = FindById(ws, id)
     If r = 0 Then Exit Function
     LovValueForId = CStr(ws.Cells(r, ColIndex(ws, "value")).Value)
+End Function
+
+' Whole years between a "YYYY-MM-DD" birth date and today (or asOf, for tests).
+' Returns "" if dob is blank, not a valid date, or in the future.
+Public Function AgeFromIsoDate(dob As String, Optional asOf As Date = 0) As String
+    If Trim(dob) = "" Then Exit Function
+    If Not IsValidIsoDate(Trim(dob)) Then Exit Function
+    Dim d As Date: d = DateSerial(CInt(Left(dob, 4)), CInt(Mid(dob, 6, 2)), CInt(Mid(dob, 9, 2)))
+    Dim t As Date: t = IIf(asOf = 0, Date, asOf)
+    If d > t Then Exit Function
+    Dim yrs As Long: yrs = Year(t) - Year(d)
+    If DateSerial(Year(t), Month(d), Day(d)) > t Then yrs = yrs - 1   ' birthday not reached yet this year
+    AgeFromIsoDate = CStr(yrs)
 End Function
 
 ' Validates a "YYYY-MM-DD" string, rejecting non-existent calendar dates

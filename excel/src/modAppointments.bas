@@ -173,7 +173,7 @@ Private Function ConsultantNameForId(consultantId As Long) As String
     ConsultantNameForId = CStr(modUtils.GetVal(ws, r, "name"))
 End Function
 
-' Fills a ComboBox with active consultant names.
+' Fills a ComboBox with active consultant names, alphabetically (case-insensitive).
 Public Sub PopulateConsultantCombo(cbo As MSForms.ComboBox)
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_consultants")
     Dim last As Long: last = modUtils.LastDataRow(ws)
@@ -183,7 +183,13 @@ Public Sub PopulateConsultantCombo(cbo As MSForms.ComboBox)
     Dim i As Long
     For i = 2 To last
         If ws.Cells(i, cActive).Value = 1 Then
-            cbo.AddItem CStr(ws.Cells(i, cName).Value)
+            Dim nm As String: nm = CStr(ws.Cells(i, cName).Value)
+            Dim pos As Long: pos = 0
+            Do While pos < cbo.ListCount
+                If StrComp(nm, CStr(cbo.List(pos)), vbTextCompare) < 0 Then Exit Do
+                pos = pos + 1
+            Loop
+            cbo.AddItem nm, pos
         End If
     Next i
 End Sub

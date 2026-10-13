@@ -1,7 +1,7 @@
 Attribute VB_Name = "modExport"
 Option Explicit
 
-Private Const VALID_STATUSES As String = "ready_to_schedule,scheduled,completed,dropped,on_hold"
+Private Const VALID_STATUSES As String = "ready_to_schedule,scheduled,active,active_ongoing,incomplete,followup,completed,dropped,on_hold"
 Private Const VALID_APPT_STATUSES As String = "scheduled,completed,no_show,cancelled,rescheduled"
 
 ' ── Generic range export (shared by every "Export" button) ────────────────

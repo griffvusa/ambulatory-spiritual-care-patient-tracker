@@ -18,6 +18,7 @@ Public FirstRunMode As Boolean   ' set by caller before .Show
 Option Explicit
 
 Private Sub UserForm_Activate()
+    lblEmail.Caption = "Username:"   ' control is named for the old email-as-username convention
     cboRole.AddItem "admin"
     cboRole.AddItem "coordinator"
     If FirstRunMode Then

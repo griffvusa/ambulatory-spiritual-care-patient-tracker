@@ -9,7 +9,7 @@ import sys
 # _data_settings (see SEED_SETTINGS) so it's discoverable from inside the file
 # too. Not load-bearing for modUpgrade's in-app import -- that merges by
 # column name and self-migrates regardless of what version a file claims.
-EXCEL_BUILD_VERSION = 1
+EXCEL_BUILD_VERSION = 2
 
 # ─── Sheet definitions ────────────────────────────────────────────────────────
 
@@ -37,9 +37,10 @@ SHEET_HEADERS = {
         'security_question', 'security_answer_hash',
     ],
     '_data_patients': [
-        'id', 'mrn', 'last_name', 'first_name', 'middle_name', 'phone',
+        'id', 'mrn', 'last_name', 'first_name', 'middle_name', 'phone', 'date_of_birth',
         'date_of_referral', 'referral_source_id', 'religion_id', 'language_id',
-        'current_status', 'is_active',
+        'referral_from', 'referral_reason', 'pcp_emailed',
+        'current_status', 'followup_date', 'is_active',
         'sdat_begin_score', 'sdat_begin_date', 'sdat_end_score', 'sdat_end_date',
         'sdat_pct_improvement', 'notes',
         'created_at',
@@ -358,6 +359,10 @@ def _configure_sheet_code(wb, component_name, filename, src_dir):
 STATUS_COLORS = {
     'Ready to Schedule': '#C6EFCE',
     'Scheduled': '#FFEB9C',
+    'Active': '#B4E5A2',
+    'Active-Ongoing': '#8FD9C9',
+    'Incomplete': '#F4B183',
+    'Follow-up': '#D9B8F0',
     'Completed': '#9DC3E6',
     'Dropped': '#FFC7CE',
     'On Hold': '#D9D9D9',
@@ -469,7 +474,8 @@ def _build_workqueue_sheet(wb):
     """Build the WorkQueue sheet: filter row, stats cell, patient table, buttons.
 
     Column layout: A=ID (hidden), B=Last Name, C=First Name, D=MRN, E=Referral Date,
-    F=Referral Source, G=Language, H=Next Appointment, I=Status. Row 1 holds filter
+    F=Referral Source, G=Language, H=Next Appointment, I=Status, J=Follow-up Date,
+    K=Reminder ("DUE TODAY" / "OVERDUE", highlighted). Row 1 holds filter
     controls + action buttons, row 2 the stats summary, row 4 the table header
     (row 5+ = data, rewritten wholesale by modPatients.RefreshWorkQueue on every
     load). Column P (hidden) is a helper range feeding the Referral Source dropdown's
@@ -520,9 +526,10 @@ def _build_workqueue_sheet(wb):
     ws.range('B2').value = 'Total Active: 0'
 
     headers = ['ID', 'Last Name', 'First Name', 'MRN', 'Referral Date',
-               'Referral Source', 'Language', 'Next Appointment', 'Status']
+               'Referral Source', 'Language', 'Next Appointment', 'Status',
+               'Follow-up Date', 'Reminder']
     ws.range('A4').value = headers
-    tbl = ws.api.ListObjects.Add(1, ws.range('A4:I4').api, None, 1)  # xlSrcRange, xlYes
+    tbl = ws.api.ListObjects.Add(1, ws.range('A4:K4').api, None, 1)  # xlSrcRange, xlYes
     tbl.Name = 'tblWorkQueue'
     tbl.ListColumns('ID').Range.EntireColumn.Hidden = True
 
@@ -530,11 +537,24 @@ def _build_workqueue_sheet(wb):
     # get silently re-parsed into locale-dependent Date serials on write.
     ws.range('E:E').api.NumberFormat = '@'  # Referral Date
     ws.range('H:H').api.NumberFormat = '@'  # Next Appointment
+    ws.range('J:J').api.NumberFormat = '@'  # Follow-up Date
 
     cf_range = ws.range('I5:I2000').api
     for label, hexcolor in STATUS_COLORS.items():
         fc = cf_range.FormatConditions.Add(1, 3, f'"{label}"')  # xlCellValue, xlEqual
         fc.Interior.Color = _hex_to_bgr(hexcolor)
+
+    # Follow-up reminders: RefreshWorkQueue writes exactly "DUE TODAY" or
+    # "OVERDUE" into column K (same cell-value rule style as the status colors).
+    rem_range = ws.range('K5:K2000').api
+    fc = rem_range.FormatConditions.Add(1, 3, '"OVERDUE"')
+    fc.Interior.Color = _hex_to_bgr('#FFC7CE')
+    fc.Font.Color = _hex_to_bgr('#9C0006')
+    fc.Font.Bold = True
+    fc = rem_range.FormatConditions.Add(1, 3, '"DUE TODAY"')
+    fc.Interior.Color = _hex_to_bgr('#FFEB9C')
+    fc.Font.Color = _hex_to_bgr('#9C5700')
+    fc.Font.Bold = True
 
     ws.range('P1').value = 'Referral Source Helper (do not edit)'
     ws.range('P:P').api.EntireColumn.Hidden = True

@@ -468,7 +468,7 @@ empty. Plan 6 should replace that `MsgBox` with
 | Control | Type | Properties (alphabetical) |
 |---|---|---|
 | `lblName` | Label | Caption: `Name:`; Height 16; Left 10; Top 12; Width 90 |
-| `lblEmail` | Label | Caption: `Email:`; Height 16; Left 10; Top 38; Width 90 |
+| `lblEmail` | Label | Caption: `Username:` (set at runtime in `UserForm_Activate`); Height 16; Left 10; Top 38; Width 90 |
 | `lblPassword` | Label | Caption: `Password:`; Height 16; Left 10; Top 64; Width 90 |
 | `lblConfirmPassword` | Label | Caption: `Confirm Password:`; Height 16; Left 10; Top 90; Width 90 |
 | `lblRole` | Label | Caption: `Role:`; Height 16; Left 10; Top 116; Width 90 |

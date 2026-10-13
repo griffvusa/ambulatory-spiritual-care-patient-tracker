@@ -42,6 +42,7 @@ Private Sub btnLogin_Click()
         ThisWorkbook.Sheets("WorkQueue").Activate
         If modAuth.IsAdmin() Then modPurge.RunPurgeCheck
         Unload Me
+        modPatients.ShowFollowupReminders
     Else
         ShowError "Invalid username or password."
         txtPassword.Text = ""

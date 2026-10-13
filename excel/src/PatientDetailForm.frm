@@ -16,9 +16,102 @@ Attribute VB_Exposed = False
 Option Explicit
 Public patientId As Long
 
+Private mLblDobCaption As MSForms.Label   ' birth date row is added at runtime (see EnsureBirthDateRow)
+Private mLblDob As MSForms.Label
+Private mLblFrom As MSForms.Label         ' referral rows are also added at runtime (see EnsureReferralRows)
+Private mLblReason As MSForms.Label
+Private mLblPcp As MSForms.Label
+Private mLblFollowup As MSForms.Label      ' follow-up date entry is added at runtime (see EnsureFollowupControls)
+Private mTxtFollowup As MSForms.TextBox
+Private mLblStatusDate As MSForms.Label    ' status (effective) date entry, also added at runtime
+Private mTxtStatusDate As MSForms.TextBox
+Private WithEvents mBtnEditHistory As MSForms.CommandButton   ' "Edit Date" for a status-history entry, added at runtime
+
 Private Sub UserForm_Activate()
     LoadPatient
 End Sub
+
+' Adds a "Born" row under Phone once per form instance, in code so the form's
+' binary layout doesn't have to change. Left-panel and bottom-panel controls
+' slide down one row; the appointments panel on the right stays put.
+Private Sub EnsureBirthDateRow()
+    If Not mLblDob Is Nothing Then Exit Sub
+    Const ROW_H As Single = 20
+    Dim edge As Single: edge = lblPhone.Top + lblPhone.Height
+    Dim bottomPanelTop As Single: bottomPanelTop = txtSdatBeginScore.Top - 25
+    Dim c As MSForms.Control
+    For Each c In Me.Controls
+        If c.Top >= edge Then
+            If Not (c.Left >= lstAppointments.Left - 5 And c.Top < bottomPanelTop) Then c.Top = c.Top + ROW_H
+        End If
+    Next c
+    Me.Height = Me.Height + ROW_H
+
+    Set mLblDobCaption = Me.Controls.Add("Forms.Label.1", "lblDobCaption", True)
+    With mLblDobCaption
+        .Caption = "Born:"
+        .Left = lblReferralDateCaption.Left: .Top = lblPhone.Top + ROW_H
+        .Width = lblReferralDateCaption.Width: .Height = lblPhone.Height
+        .Font.Name = lblReferralDateCaption.Font.Name: .Font.Size = lblReferralDateCaption.Font.Size
+    End With
+    Set mLblDob = Me.Controls.Add("Forms.Label.1", "lblDob", True)
+    With mLblDob
+        .Left = lblPhone.Left: .Top = lblPhone.Top + ROW_H
+        .Width = 180: .Height = lblPhone.Height
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
+End Sub
+
+' Adds Referral From / Reason / PCP Emailed rows under Language once per form
+' instance, in code so the form's binary layout doesn't have to change.
+Private Sub EnsureReferralRows()
+    If Not mLblFrom Is Nothing Then Exit Sub
+    Const ROW_H As Single = 20
+    Const REASON_H As Single = 34
+    Dim total As Single: total = ROW_H + REASON_H + ROW_H
+    Dim edge As Single: edge = lblLanguage.Top + lblLanguage.Height
+    Dim bottomPanelTop As Single: bottomPanelTop = txtSdatBeginScore.Top - 25
+    Dim c As MSForms.Control
+    For Each c In Me.Controls
+        If c.Top >= edge Then
+            If Not (c.Left >= lstAppointments.Left - 5 And c.Top < bottomPanelTop) Then c.Top = c.Top + total
+        End If
+    Next c
+    Me.Height = Me.Height + total
+
+    Dim y As Single: y = lblLanguage.Top + ROW_H
+    AddCaption "lblFromCaption", "From:", y
+    Set mLblFrom = AddValue("lblFrom", y, lblPhone.Height)
+    y = y + ROW_H
+    AddCaption "lblReasonCaption", "Reason:", y
+    Set mLblReason = AddValue("lblReason", y, REASON_H - 4)
+    mLblReason.WordWrap = True
+    y = y + REASON_H
+    AddCaption "lblPcpCaption", "PCP emailed:", y
+    Set mLblPcp = AddValue("lblPcp", y, lblPhone.Height)
+End Sub
+
+Private Sub AddCaption(ctlName As String, caption As String, topPos As Single)
+    Dim lbl As MSForms.Label
+    Set lbl = Me.Controls.Add("Forms.Label.1", ctlName, True)
+    With lbl
+        .Caption = caption
+        .Left = lblReferralDateCaption.Left: .Top = topPos
+        .Width = lblReferralDateCaption.Width: .Height = lblPhone.Height
+        .Font.Name = lblReferralDateCaption.Font.Name: .Font.Size = lblReferralDateCaption.Font.Size
+    End With
+End Sub
+
+Private Function AddValue(ctlName As String, topPos As Single, h As Single) As MSForms.Label
+    Dim lbl As MSForms.Label
+    Set lbl = Me.Controls.Add("Forms.Label.1", ctlName, True)
+    With lbl
+        .Left = lblLanguage.Left: .Top = topPos
+        .Width = 200: .Height = h
+        .Font.Name = lblLanguage.Font.Name: .Font.Size = lblLanguage.Font.Size
+    End With
+    Set AddValue = lbl
+End Function
 
 Private Sub LoadPatient()
     Dim p As Object: Set p = modPatients.GetPatient(patientId)
@@ -26,13 +119,31 @@ Private Sub LoadPatient()
     lblPatientName.Caption = Trim(p("first_name") & " " & p("middle_name") & " " & p("last_name"))
     lblMrn.Caption = p("mrn") & ""
     lblPhone.Caption = p("phone") & ""
+    EnsureBirthDateRow
+    Dim dob As String: dob = p("date_of_birth") & ""
+    If dob = "" Then
+        mLblDob.Caption = ""
+    ElseIf modUtils.AgeFromIsoDate(dob) <> "" Then
+        mLblDob.Caption = dob & "  (Age " & modUtils.AgeFromIsoDate(dob) & ")"
+    Else
+        mLblDob.Caption = dob
+    End If
     lblReferralDate.Caption = p("date_of_referral") & ""
     lblReferralSource.Caption = p("referral_source") & ""
     lblReligion.Caption = p("religion") & ""
     lblLanguage.Caption = p("language") & ""
+    EnsureReferralRows
+    EnsureFollowupControls
+    mLblFrom.Caption = p("referral_from") & ""
+    mLblReason.Caption = p("referral_reason") & ""
+    mLblPcp.Caption = p("pcp_emailed") & ""
 
     Dim currentStatus As String: currentStatus = p("current_status") & ""
     lblStatusBadge.Caption = modPatients.statusLabel(currentStatus)
+    mTxtFollowup.Text = p("followup_date") & ""
+    If currentStatus = "followup" And mTxtFollowup.Text <> "" Then
+        lblStatusBadge.Caption = lblStatusBadge.Caption & " " & mTxtFollowup.Text
+    End If
     lblStatusBadge.BackColor = StatusBadgeColor(currentStatus)
 
     ' ColumnWidths was fixed at 7 columns at design time (date/time/type/
@@ -64,14 +175,17 @@ Private Sub LoadPatient()
     If currentStatus <> "deleted" Then
         cboChangeStatus.value = modPatients.statusLabel(currentStatus)
     End If
+    UpdateFollowupVisibility
 
     lstStatusHistory.Clear
-    lstStatusHistory.ColumnCount = 3
+    lstStatusHistory.ColumnCount = 4                                  ' 4th column: hidden history id
+    lstStatusHistory.ColumnWidths = "80 pt;90 pt;80 pt;0 pt"
     Dim h As Object
     For Each h In modPatients.GetStatusHistory(patientId)
         lstStatusHistory.AddItem h("status")
         lstStatusHistory.List(lstStatusHistory.ListCount - 1, 1) = h("changed_by_name")
         lstStatusHistory.List(lstStatusHistory.ListCount - 1, 2) = h("changed_at")
+        lstStatusHistory.List(lstStatusHistory.ListCount - 1, 3) = h("id")
     Next h
 
     txtSdatBeginScore.Text = p("sdat_begin_score") & ""
@@ -96,6 +210,10 @@ Private Function StatusBadgeColor(currentStatus As String) As Long
     Select Case LCase(currentStatus)
         Case "ready_to_schedule": StatusBadgeColor = RGB(&HC6, &HEF, &HCE)
         Case "scheduled": StatusBadgeColor = RGB(&HFF, &HEB, &H9C)
+        Case "active": StatusBadgeColor = RGB(&HB4, &HE5, &HA2)
+        Case "active_ongoing": StatusBadgeColor = RGB(&H8F, &HD9, &HC9)
+        Case "incomplete": StatusBadgeColor = RGB(&HF4, &HB1, &H83)
+        Case "followup": StatusBadgeColor = RGB(&HD9, &HB8, &HF0)
         Case "completed": StatusBadgeColor = RGB(&H9D, &HC3, &HE6)
         Case "dropped": StatusBadgeColor = RGB(&HFF, &HC7, &HCE)
         Case "on_hold": StatusBadgeColor = RGB(&HD9, &HD9, &HD9)
@@ -106,8 +224,145 @@ End Function
 
 Private Sub btnApplyStatus_Click()
     If Trim(cboChangeStatus.value) = "" Then Exit Sub
-    modPatients.ChangeStatus patientId, modPatients.StatusInternal(cboChangeStatus.value)
+    Dim newStatus As String: newStatus = modPatients.StatusInternal(cboChangeStatus.value)
+    Dim statusDate As String: statusDate = Trim(mTxtStatusDate.Text)
+    If statusDate <> "" Then
+        If Not modUtils.IsValidIsoDate(statusDate) Then
+            MsgBox "Enter the status date as YYYY-MM-DD, or leave it blank to use today.", _
+                vbExclamation, "Status date"
+            mTxtStatusDate.SetFocus
+            Exit Sub
+        End If
+        If statusDate > modUtils.DateISO(Date) Then
+            MsgBox "The status date can't be in the future.", vbExclamation, "Status date"
+            mTxtStatusDate.SetFocus
+            Exit Sub
+        End If
+        If statusDate = modUtils.DateISO(Date) Then statusDate = ""   ' same as the default
+    End If
+
+    Dim followupDate As String
+    If newStatus = "followup" Then
+        followupDate = Trim(mTxtFollowup.Text)
+        If followupDate = "" Or Not modUtils.IsValidIsoDate(followupDate) Then
+            MsgBox "Enter the follow-up date as YYYY-MM-DD.", vbExclamation, "Follow-up date"
+            mTxtFollowup.SetFocus
+            Exit Sub
+        End If
+    End If
+    modPatients.ChangeStatus patientId, newStatus, followupDate, statusDate
+    mTxtStatusDate.Text = ""
     LoadPatient
+End Sub
+
+Private Sub cboChangeStatus_Change()
+    UpdateFollowupVisibility
+End Sub
+
+' Status-change date entry (always shown) and follow-up date entry (shown only
+' while "Follow-up" is the selected status), in two rows under the status
+' picker. Built in code so the form's binary layout doesn't change: everything
+' below the picker on the left and bottom panels slides down two rows.
+Private Sub EnsureFollowupControls()
+    If Not mTxtFollowup Is Nothing Then Exit Sub
+    Const ROW_H As Single = 22
+    Const SHIFT As Single = 2 * ROW_H
+    Dim edge As Single: edge = cboChangeStatus.Top + cboChangeStatus.Height
+    Dim bottomPanelTop As Single: bottomPanelTop = txtSdatBeginScore.Top - 25
+    Dim c As MSForms.Control
+    For Each c In Me.Controls
+        If c.Top >= edge Then
+            If Not (c.Left >= lstAppointments.Left - 5 And c.Top < bottomPanelTop) Then c.Top = c.Top + SHIFT
+        End If
+    Next c
+    Me.Height = Me.Height + SHIFT
+
+    Dim y As Single: y = edge + 4
+    Set mLblStatusDate = AddStatusLabel("lblStatusDate", "Status date:", y + 2)
+    Set mTxtStatusDate = AddStatusText("txtStatusDate", y)
+    mTxtStatusDate.ControlTipText = "Leave blank to use today. Enter YYYY-MM-DD to back-date this status change."
+
+    y = y + ROW_H
+    Set mLblFollowup = AddStatusLabel("lblFollowupDate", "Follow-up:", y + 2)
+    Set mTxtFollowup = AddStatusText("txtFollowupDate", y)
+    UpdateFollowupVisibility
+
+    Set mBtnEditHistory = Me.Controls.Add("Forms.CommandButton.1", "btnEditHistoryDate", True)
+    With mBtnEditHistory
+        .Caption = "Edit Date..."
+        .Left = lstStatusHistory.Left + lstStatusHistory.Width - 80
+        .Top = lblStatusHistoryHeader.Top - 3
+        .Width = 80: .Height = 18
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
+End Sub
+
+Private Sub mBtnEditHistory_Click()
+    EditSelectedHistoryDate
+End Sub
+
+Private Sub lstStatusHistory_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
+    EditSelectedHistoryDate
+End Sub
+
+' Lets the user correct the date of the selected status-history entry.
+Private Sub EditSelectedHistoryDate()
+    If lstStatusHistory.ListIndex < 0 Then
+        MsgBox "Select a status history entry first.", vbInformation, "Edit Status Date"
+        Exit Sub
+    End If
+    Dim idx As Long: idx = lstStatusHistory.ListIndex
+    Dim current As String: current = Left(CStr(lstStatusHistory.List(idx, 2)), 10)
+    Dim answer As String
+    answer = InputBox("Date for the " & Chr(34) & lstStatusHistory.List(idx, 0) & Chr(34) & " status (YYYY-MM-DD):", _
+                      "Edit Status Date", current)
+    answer = Trim(answer)
+    If answer = "" Or answer = current Then Exit Sub   ' cancelled or unchanged
+
+    If Not modUtils.IsValidIsoDate(answer) Then
+        MsgBox "That isn't a valid date. Use YYYY-MM-DD.", vbExclamation, "Edit Status Date"
+        Exit Sub
+    End If
+    If answer > modUtils.DateISO(Date) Then
+        MsgBox "The status date can't be in the future.", vbExclamation, "Edit Status Date"
+        Exit Sub
+    End If
+    If modPatients.UpdateStatusHistoryDate(CLng(lstStatusHistory.List(idx, 3)), answer) Then
+        LoadPatient
+    Else
+        MsgBox "Couldn't update that entry.", vbExclamation, "Edit Status Date"
+    End If
+End Sub
+
+Private Function AddStatusLabel(ctlName As String, caption As String, topPos As Single) As MSForms.Label
+    Dim lbl As MSForms.Label
+    Set lbl = Me.Controls.Add("Forms.Label.1", ctlName, True)
+    With lbl
+        .Caption = caption
+        .Left = cboChangeStatus.Left: .Top = topPos
+        .Width = 58: .Height = 16
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
+    Set AddStatusLabel = lbl
+End Function
+
+Private Function AddStatusText(ctlName As String, topPos As Single) As MSForms.TextBox
+    Dim tb As MSForms.TextBox
+    Set tb = Me.Controls.Add("Forms.TextBox.1", ctlName, True)
+    With tb
+        .Left = cboChangeStatus.Left + 60: .Top = topPos
+        .Width = 72: .Height = 18
+        .MaxLength = 10
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
+    Set AddStatusText = tb
+End Function
+
+Private Sub UpdateFollowupVisibility()
+    If mTxtFollowup Is Nothing Then Exit Sub
+    Dim show As Boolean: show = (cboChangeStatus.value = "Follow-up")
+    mLblFollowup.Visible = show
+    mTxtFollowup.Visible = show
 End Sub
 
 Private Sub btnEditPatient_Click()

@@ -20,7 +20,7 @@ Public appointmentId As Long   ' 0 = new appointment
 Option Explicit
 
 Private Sub UserForm_Activate()
-    modUtils.PopulateLovCombo cboType, "appointment_type"
+    modUtils.PopulateLovCombo cboType, "appointment_type", True
     modAppointments.PopulateConsultantCombo cboConsultant
 
     ' The data model has 5 appointment statuses (rescheduled was added in the

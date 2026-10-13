@@ -98,6 +98,21 @@ Private Function ReleaseNotesForVersion(version As String) As String
                 "one -- if every admin is ever locked out (Admin locked out? Use " & _
                 "recovery code)."
             ReleaseNotesForVersion = notes
+        Case "2"
+            ReleaseNotesForVersion = "- Patients now have a birth date (Add/Edit Patient), and their " & _
+                "age is calculated from today's date and shown on the patient detail screen." & vbCrLf & vbCrLf & _
+                "- Patients also record who the referral came from, the reason for " & _
+                "referral, and a PCP-emailed note." & vbCrLf & vbCrLf & _
+                "- A status change can be back-dated with the Status date box " & _
+                "(blank = today), e.g. when a patient dropped or completed earlier. " & _
+                "Past status history entries can be corrected too (select one, then " & _
+                "Edit Date, or double-click it)." & vbCrLf & vbCrLf & _
+                "- New patient statuses: Active, Active-Ongoing, Incomplete and Follow-up " & _
+                "(Follow-up records a follow-up date, shown on the Work Queue with a " & _
+                "DUE TODAY / OVERDUE reminder, and listed in a pop-up when you sign in)." & vbCrLf & vbCrLf & _
+                "- Referral date defaults to today on new patients." & vbCrLf & vbCrLf & _
+                "- Language, religion, referral source, appointment type and consultant " & _
+                "dropdowns are alphabetical (English and Spanish first for language)."
     End Select
 End Function
 
