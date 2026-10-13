@@ -249,18 +249,23 @@ Private Sub btnApplyStatus_Click()
 End Sub
 
 ' One save for the whole screen. Apply and every Save button on this form call
-' this, so an entry in any box is saved whichever of them is pressed -- nobody
-' has to press Apply AND Save. Everything is validated first; if anything is
-' invalid nothing is saved. alwaysApplyStatus is True for the Apply button
-' (it records the picked status even if it matches the current one, e.g. to
-' back-date it); the Save buttons only apply a status that was changed.
-Private Sub SaveAllPending(alwaysApplyStatus As Boolean)
+' this, so an entry in any box -- status, follow-up date, SDAT or notes -- is
+' saved whichever of them is pressed, whether you filled in one field or
+' several. Nobody has to press Apply AND Save. Everything is validated first;
+' if anything is invalid nothing is saved. A status is recorded when a
+' different status is picked, or when the status date box has been changed
+' (to back-date the status). fromApply only controls whether the user is told
+' when nothing at all was changed.
+Private Sub SaveAllPending(fromApply As Boolean)
     Dim today As String: today = modUtils.DateISO(Date)
 
     ' ── status change ──
+    Dim statusDateText As String: statusDateText = Trim(mTxtStatusDate.Text)
+    Dim statusDateEdited As Boolean
+    statusDateEdited = (statusDateText <> "" And statusDateText <> Format(Date, "mm/dd/yyyy"))
     Dim doStatus As Boolean
     doStatus = (Trim(cboChangeStatus.value) <> "") And _
-               (alwaysApplyStatus Or cboChangeStatus.value <> mSnapStatusLabel)
+               (cboChangeStatus.value <> mSnapStatusLabel Or statusDateEdited)
     Dim newStatus As String, statusDate As String
     If doStatus Then
         newStatus = modPatients.StatusInternal(cboChangeStatus.value)
@@ -321,6 +326,10 @@ Private Sub SaveAllPending(alwaysApplyStatus As Boolean)
     End If
 
     ' ── everything valid: save what changed ──
+    If Not (doStatus Or doFollowup Or doSdat Or doNotes) Then
+        If fromApply Then MsgBox "Nothing has been changed.", vbInformation, "Patient"
+        Exit Sub
+    End If
     If doStatus Then
         modPatients.ChangeStatus patientId, newStatus, statusDate
         mTxtStatusDate.Text = Format(Date, "mm/dd/yyyy")   ' back to the default for the next change
