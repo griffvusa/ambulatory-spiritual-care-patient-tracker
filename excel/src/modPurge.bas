@@ -273,5 +273,5 @@ End Function
 
 Public Sub RefreshPurgeConfigDisplay()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Admin")
-    ws.Range("C27").Value = modUtils.GetSetting("last_purge_date")
+    ws.Range("C27").Value = modUtils.FmtDate(modUtils.GetSetting("last_purge_date"))
 End Sub

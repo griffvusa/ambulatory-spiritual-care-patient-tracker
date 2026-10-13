@@ -34,7 +34,7 @@ Private Sub UserForm_Activate()
 
     If appointmentId > 0 Then
         Dim a As Object: Set a = modAppointments.GetAppointment(appointmentId)
-        txtDate.Text = a("date") & ""
+        txtDate.Text = modUtils.FmtDate(a("date") & "")
         txtTime.Text = a("time") & ""
         cboType.value = a("type") & ""
         cboConsultant.value = a("consultant_name") & ""
@@ -49,11 +49,11 @@ Private Sub UserForm_Activate()
 End Sub
 
 Private Sub btnPickDate_Click()
-    CalendarPickerForm.InitialDate = Trim(txtDate.Text)
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(txtDate.Text)
     CalendarPickerForm.SelectedDate = ""
     CalendarPickerForm.Show
     If CalendarPickerForm.SelectedDate <> "" Then
-        txtDate.Text = CalendarPickerForm.SelectedDate
+        txtDate.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
     End If
     Unload CalendarPickerForm
 End Sub
@@ -73,8 +73,9 @@ Private Sub btnSave_Click()
         ShowError "Date is required."
         Exit Sub
     End If
-    If Not modUtils.IsValidIsoDate(Trim(txtDate.Text)) Then
-        ShowError "Date must be YYYY-MM-DD."
+    Dim dateIso As String: dateIso = modUtils.ParseDate(txtDate.Text)
+    If dateIso = "" Then
+        ShowError "Date must be MM/DD/YYYY."
         Exit Sub
     End If
     If Trim(txtTime.Text) = "" Then
@@ -89,7 +90,7 @@ Private Sub btnSave_Click()
     Dim typeId As Long: typeId = modUtils.LovIdForValue("appointment_type", cboType.value)
     Dim consultantId As Long: consultantId = modAppointments.ConsultantIdForName(cboConsultant.value)
 
-    modAppointments.Save appointmentId, patientId, Trim(txtDate.Text), Trim(txtTime.Text), _
+    modAppointments.Save appointmentId, patientId, dateIso, Trim(txtTime.Text), _
         typeId, consultantId, CBool(chkLastAppointment.value), cboStatus.value, txtNotes.Text
     Unload Me
 End Sub

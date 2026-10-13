@@ -362,7 +362,6 @@ STATUS_COLORS = {
     'Active': '#B4E5A2',
     'Active-Ongoing': '#8FD9C9',
     'Incomplete': '#F4B183',
-    'Follow-up': '#D9B8F0',
     'Completed': '#9DC3E6',
     'Dropped': '#FFC7CE',
     'On Hold': '#D9D9D9',
@@ -535,9 +534,11 @@ def _build_workqueue_sheet(wb):
 
     # Text format so the ISO date strings RefreshWorkQueue writes here don't
     # get silently re-parsed into locale-dependent Date serials on write.
-    ws.range('E:E').api.NumberFormat = '@'  # Referral Date
-    ws.range('H:H').api.NumberFormat = '@'  # Next Appointment
-    ws.range('J:J').api.NumberFormat = '@'  # Follow-up Date
+    # Dates are written as real date values (not text) so the columns sort
+    # chronologically, and are displayed as MM/DD/YYYY.
+    ws.range('E:E').api.NumberFormat = 'mm/dd/yyyy'  # Referral Date
+    ws.range('H:H').api.NumberFormat = 'mm/dd/yyyy hh:mm'  # Next Appointment
+    ws.range('J:J').api.NumberFormat = 'mm/dd/yyyy'  # Follow-up Date
 
     cf_range = ws.range('I5:I2000').api
     for label, hexcolor in STATUS_COLORS.items():
@@ -586,7 +587,7 @@ def _build_appointments_sheet(wb):
     ws.range('B:B').api.NumberFormat = '@'
 
     ws.range('A1').value = 'Date:'
-    ws.range('B1').value = datetime.date.today().isoformat()
+    ws.range('B1').value = datetime.date.today().strftime('%m/%d/%Y')
 
     _add_button(ws, 'C1', '< Prev Day', 'modAppointments.UI_PrevDay', width=90)
     _add_button(ws, 'D1', 'Next Day >', 'modAppointments.UI_NextDay', width=90)

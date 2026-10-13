@@ -313,11 +313,10 @@ Public Sub RefreshAppointments()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Appointments")
     Application.EnableEvents = False
 
-    Dim dayIso As String: dayIso = CStr(ws.Range("B1").Value)
-    If Trim(dayIso) = "" Then
-        dayIso = modUtils.DateISO(Date)
-        ws.Range("B1").Value = dayIso
-    End If
+    ' B1 shows MM/DD/YYYY; everything below works in ISO.
+    Dim dayIso As String: dayIso = modUtils.ParseDate(CStr(ws.Range("B1").Value))
+    If dayIso = "" Then dayIso = modUtils.DateISO(Date)
+    ws.Range("B1").Value = modUtils.FmtDate(dayIso)
 
     Dim results As Collection: Set results = ForDay(dayIso)
 
@@ -369,15 +368,16 @@ End Sub
 
 Public Sub UI_Today()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Appointments")
-    ws.Range("B1").Value = modUtils.DateISO(Date)
+    ws.Range("B1").Value = modUtils.FmtDate(modUtils.DateISO(Date))
     RefreshAppointments
 End Sub
 
 Private Sub ShiftSelectedDate(byDays As Long)
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Appointments")
-    Dim current As String: current = CStr(ws.Range("B1").Value)
+    Dim current As String: current = modUtils.ParseDate(CStr(ws.Range("B1").Value))
+    If current = "" Then current = modUtils.DateISO(Date)
     Dim y As Long, m As Long, dd As Long
     y = CLng(Left(current, 4)): m = CLng(Mid(current, 6, 2)): dd = CLng(Mid(current, 9, 2))
-    ws.Range("B1").Value = modUtils.DateISO(DateSerial(y, m, dd) + byDays)
+    ws.Range("B1").Value = modUtils.FmtDate(modUtils.DateISO(DateSerial(y, m, dd) + byDays))
     RefreshAppointments
 End Sub

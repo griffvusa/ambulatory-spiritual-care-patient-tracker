@@ -99,18 +99,26 @@ Private Function ReleaseNotesForVersion(version As String) As String
                 "recovery code)."
             ReleaseNotesForVersion = notes
         Case "2"
-            ReleaseNotesForVersion = "- Patients now have a birth date (Add/Edit Patient), and their " & _
+            ReleaseNotesForVersion = "- On the patient detail screen, Apply and every Save button save " & _
+                "everything you've entered -- you no longer need to press both." & vbCrLf & vbCrLf & _
+                "- Patients now have a birth date (Add/Edit Patient), and their " & _
                 "age is calculated from today's date and shown on the patient detail screen." & vbCrLf & vbCrLf & _
                 "- Patients also record who the referral came from, the reason for " & _
                 "referral, and a PCP-emailed note." & vbCrLf & vbCrLf & _
                 "- A status change can be back-dated with the Status date box " & _
-                "(blank = today), e.g. when a patient dropped or completed earlier. " & _
+                "(it defaults to today; type a date or use the calendar button), e.g. " & _
+                "when a patient dropped or completed earlier. " & _
                 "Past status history entries can be corrected too (select one, then " & _
                 "Edit Date, or double-click it)." & vbCrLf & vbCrLf & _
-                "- New patient statuses: Active, Active-Ongoing, Incomplete and Follow-up " & _
-                "(Follow-up records a follow-up date, shown on the Work Queue with a " & _
-                "DUE TODAY / OVERDUE reminder, and listed in a pop-up when you sign in)." & vbCrLf & vbCrLf & _
-                "- Referral date defaults to today on new patients." & vbCrLf & vbCrLf & _
+                "- New patient statuses: Active, Active-Ongoing and Incomplete." & vbCrLf & vbCrLf & _
+                "- Every patient has a Follow-up date (with a calendar picker) on the patient " & _
+                "detail screen. It shows on the Work Queue with a DUE TODAY / OVERDUE reminder " & _
+                "and is listed in a pop-up when you sign in (not for completed or dropped " & _
+                "patients)." & vbCrLf & vbCrLf & _
+                "- Dates are shown and entered as MM/DD/YYYY (MMDDYYYY also works)." & vbCrLf & vbCrLf & _
+                "- Referral date defaults to today on new patients, and a new patient's " & _
+                "initial status date is the referral date (adjust it from the status " & _
+                "history with Edit Date)." & vbCrLf & vbCrLf & _
                 "- Language, religion, referral source, appointment type and consultant " & _
                 "dropdowns are alphabetical (English and Spanish first for language)."
     End Select

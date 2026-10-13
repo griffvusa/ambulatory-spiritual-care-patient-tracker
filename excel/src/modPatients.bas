@@ -9,7 +9,6 @@ Public Function StatusLabel(internalValue As String) As String
         Case "active": StatusLabel = "Active"
         Case "active_ongoing": StatusLabel = "Active-Ongoing"
         Case "incomplete": StatusLabel = "Incomplete"
-        Case "followup": StatusLabel = "Follow-up"
         Case "completed": StatusLabel = "Completed"
         Case "dropped": StatusLabel = "Dropped"
         Case "on_hold": StatusLabel = "On Hold"
@@ -25,7 +24,6 @@ Public Function StatusInternal(label As String) As String
         Case "Active": StatusInternal = "active"
         Case "Active-Ongoing": StatusInternal = "active_ongoing"
         Case "Incomplete": StatusInternal = "incomplete"
-        Case "Follow-up": StatusInternal = "followup"
         Case "Completed": StatusInternal = "completed"
         Case "Dropped": StatusInternal = "dropped"
         Case "On Hold": StatusInternal = "on_hold"
@@ -43,7 +41,6 @@ Public Function AllStatusLabelsExceptDeleted() As Collection
     result.Add "Active"
     result.Add "Active-Ongoing"
     result.Add "Incomplete"
-    result.Add "Follow-up"
     result.Add "Completed"
     result.Add "Dropped"
     result.Add "On Hold"
@@ -190,7 +187,8 @@ Public Function ListForWorkQueue(statusFilter As String, referralSourceId As Lon
             d("language") = modUtils.LovValueForId(CLng(ws.Cells(i, cLanguage).Value))
             d("status_label") = StatusLabel(status)
             d("followup_date") = ws.Cells(i, cFollowup).Value & ""
-            d("followup_reminder") = FollowupReminder(CStr(d("followup_date")))
+            d("date_of_referral") = ws.Cells(i, cReferralDate).Value & ""
+            If FollowupApplies(status) Then d("followup_reminder") = FollowupReminder(CStr(d("followup_date")))
             d("next_appointment") = NextScheduledAppointmentText(pid)
             result.Add d
         End If
@@ -230,10 +228,16 @@ Private Function NextScheduledAppointmentText(patientId As Long) As String
     End If
 End Function
 
+' A follow-up date only generates reminders while the patient is still in
+' care: not for completed or dropped patients (deleted ones are inactive).
+Private Function FollowupApplies(status As String) As Boolean
+    FollowupApplies = (status <> "completed" And status <> "dropped" And status <> "deleted")
+End Function
+
 ' "OVERDUE" / "DUE TODAY" / "" for a follow-up date (ISO text compares correctly).
 Public Function FollowupReminder(followupDate As String) As String
     If followupDate = "" Then Exit Function
-    Dim today As String: today = Format(Date, "yyyy-mm-dd")
+    Dim today As String: today = modUtils.DateISO(Date)
     If followupDate < today Then
         FollowupReminder = "OVERDUE"
     ElseIf followupDate = today Then
@@ -241,7 +245,7 @@ Public Function FollowupReminder(followupDate As String) As String
     End If
 End Function
 
-' Active patients in "Follow-up" status whose follow-up date is today or earlier.
+' Active patients (not completed/dropped) whose follow-up date is today or earlier.
 Public Function FollowupsDueCount() As Long
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_patients")
     Dim last As Long: last = modUtils.LastDataRow(ws)
@@ -250,15 +254,15 @@ Public Function FollowupsDueCount() As Long
     Dim cFollowup As Long: cFollowup = modUtils.ColIndex(ws, "followup_date")
     Dim i As Long, n As Long
     For i = 2 To last
-        If ws.Cells(i, cActive).Value = 1 And CStr(ws.Cells(i, cStatus).Value) = "followup" Then
+        If ws.Cells(i, cActive).Value = 1 And FollowupApplies(CStr(ws.Cells(i, cStatus).Value)) Then
             If FollowupReminder(CStr(ws.Cells(i, cFollowup).Value)) <> "" Then n = n + 1
         End If
     Next i
     FollowupsDueCount = n
 End Function
 
-' Login-time pop-up listing active Follow-up patients whose follow-up date is
-' today or earlier (overdue first). Silent when there is nothing due.
+' Login-time pop-up listing active patients (not completed/dropped) whose
+' follow-up date is today or earlier (overdue first). Silent when nothing is due.
 Public Sub ShowFollowupReminders()
     Const MAX_LINES As Long = 15
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_patients")
@@ -274,13 +278,13 @@ Public Sub ShowFollowupReminders()
     Dim nOverdue As Long, nToday As Long, shown As Long
     Dim i As Long
     For i = 2 To last
-        If ws.Cells(i, cActive).Value = 1 And CStr(ws.Cells(i, cStatus).Value) = "followup" Then
+        If ws.Cells(i, cActive).Value = 1 And FollowupApplies(CStr(ws.Cells(i, cStatus).Value)) Then
             Dim fu As String: fu = CStr(ws.Cells(i, cFollowup).Value)
             Dim reminder As String: reminder = FollowupReminder(fu)
             If reminder <> "" Then
                 Dim entry As String
                 entry = "   " & ws.Cells(i, cLast).Value & ", " & ws.Cells(i, cFirst).Value & _
-                       "  (MRN " & ws.Cells(i, cMrn).Value & ")  " & fu & vbCrLf
+                       "  (MRN " & ws.Cells(i, cMrn).Value & ")  " & modUtils.FmtDate(fu) & vbCrLf
                 If reminder = "OVERDUE" Then
                     nOverdue = nOverdue + 1
                     If nOverdue <= MAX_LINES Then overdue = overdue & entry
@@ -310,7 +314,7 @@ End Sub
 Public Function CountsByStatus() As Object
     Dim counts As Object: Set counts = CreateObject("Scripting.Dictionary")
     Dim statuses As Variant: statuses = Array("ready_to_schedule", "scheduled", "active", "active_ongoing", "incomplete", _
-                     "followup", "completed", "dropped", "on_hold")
+                     "completed", "dropped", "on_hold")
     Dim s As Variant
     For Each s In statuses
         counts(CStr(s)) = 0
@@ -337,7 +341,8 @@ Public Sub Save(patientId As Long, mrn As String, lastName As String, firstName 
                  middleName As String, phone As String, referralDate As String, _
                  referralSourceId As Long, religionId As Long, languageId As Long, _
                  Optional dateOfBirth As String = "", Optional referralFrom As String = "", _
-                 Optional referralReason As String = "", Optional pcpEmailed As String = "")
+                 Optional referralReason As String = "", Optional pcpEmailed As String = "", _
+                 Optional initialStatusDate As String = "")
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_patients")
     Dim r As Long
     Dim newId As Long
@@ -370,7 +375,8 @@ Public Sub Save(patientId As Long, mrn As String, lastName As String, firstName 
     modUtils.SetVal ws, r, "language_id", languageId
 
     If patientId = 0 Then
-        AppendStatusHistory newId, "ready_to_schedule"
+        ' initialStatusDate (ISO, "" = now) is when the patient entered "ready to schedule"
+        AppendStatusHistory newId, "ready_to_schedule", initialStatusDate
     End If
     modUtils.AutoSave
 End Sub
@@ -392,8 +398,6 @@ Private Sub AppendStatusHistory(patientId As Long, status As String, Optional ef
     End If
 End Sub
 
-' followupDate (YYYY-MM-DD) is kept only for the "followup" status and cleared
-' for every other status.
 ' Corrects the date of an existing status-history entry. Only the date part of
 ' changed_at is replaced (the time of day is kept) so same-day ordering holds.
 ' Returns False if the entry doesn't exist or newDate isn't a valid YYYY-MM-DD.
@@ -410,13 +414,21 @@ Public Function UpdateStatusHistoryDate(historyId As Long, newDate As String) As
     UpdateStatusHistoryDate = True
 End Function
 
-Public Sub ChangeStatus(patientId As Long, newStatus As String, Optional followupDate As String = "", _
-                        Optional effectiveDate As String = "")
+' Sets or clears (isoDate = "") a patient's follow-up date, independent of status.
+Public Sub SaveFollowupDate(patientId As Long, isoDate As String)
+    Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_patients")
+    Dim r As Long: r = modUtils.FindById(ws, patientId)
+    If r = 0 Then Exit Sub
+    modUtils.SetVal ws, r, "followup_date", isoDate
+    modUtils.AutoSave
+End Sub
+
+' effectiveDate ("YYYY-MM-DD", "" = now) back-dates the status history entry.
+Public Sub ChangeStatus(patientId As Long, newStatus As String, Optional effectiveDate As String = "")
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("_data_patients")
     Dim r As Long: r = modUtils.FindById(ws, patientId)
     If r = 0 Then Exit Sub
     modUtils.SetVal ws, r, "current_status", newStatus
-    modUtils.SetVal ws, r, "followup_date", IIf(newStatus = "followup", followupDate, "")
     If newStatus = "deleted" Then
         modUtils.SetVal ws, r, "is_active", 0
     End If
@@ -510,6 +522,32 @@ Public Sub UI_ExportWorkQueue()
     modExport.ExportRangeToXlsx ws.Range(ws.Cells(4, 2), ws.Cells(lastRow, 11)), "WorkQueue.xlsx"
 End Sub
 
+' ISO "yyyy-mm-dd" -> a real Date (shown as mm/dd/yyyy by the column's number
+' format, and sorted chronologically); "" if blank/invalid.
+Private Function IsoToDateValue(iso As String) As Variant
+    If Not modUtils.IsValidIsoDate(iso) Or iso = "" Then
+        IsoToDateValue = ""
+    Else
+        IsoToDateValue = DateSerial(CInt(Left(iso, 4)), CInt(Mid(iso, 6, 2)), CInt(Mid(iso, 9, 2)))
+    End If
+End Function
+
+' "yyyy-mm-dd hh:mm" -> Date+time value (or just the date if the time isn't HH:MM).
+Private Function NextApptValue(text As String) As Variant
+    If Len(text) < 10 Then
+        NextApptValue = ""
+        Exit Function
+    End If
+    Dim v As Variant: v = IsoToDateValue(Left(text, 10))
+    If VarType(v) <> vbDate Then
+        NextApptValue = ""
+        Exit Function
+    End If
+    Dim t As String: t = Trim(Mid(text, 11))
+    If t <> "" And modUtils.IsValidTime(t) Then v = v + TimeValue(t)
+    NextApptValue = v
+End Function
+
 Public Sub RefreshWorkQueue()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("WorkQueue")
 
@@ -556,12 +594,12 @@ Public Sub RefreshWorkQueue()
             tbl.DataBodyRange(r, 2).Value = d("last_name")
             tbl.DataBodyRange(r, 3).Value = d("first_name")
             tbl.DataBodyRange(r, 4).Value = d("mrn")
-            tbl.DataBodyRange(r, 5).Value = d("date_of_referral")
+            tbl.DataBodyRange(r, 5).Value = IsoToDateValue(CStr(d("date_of_referral")))
             tbl.DataBodyRange(r, 6).Value = d("referral_source")
             tbl.DataBodyRange(r, 7).Value = d("language")
-            tbl.DataBodyRange(r, 8).Value = d("next_appointment")
+            tbl.DataBodyRange(r, 8).Value = NextApptValue(CStr(d("next_appointment")))
             tbl.DataBodyRange(r, 9).Value = d("status_label")
-            tbl.DataBodyRange(r, 10).Value = d("followup_date")
+            tbl.DataBodyRange(r, 10).Value = IsoToDateValue(CStr(d("followup_date")))
             tbl.DataBodyRange(r, 11).Value = d("followup_reminder")
             r = r + 1
         Next d
@@ -575,7 +613,6 @@ Public Sub RefreshWorkQueue()
         "   Active: " & counts("active") & _
         "   Active-Ongoing: " & counts("active_ongoing") & _
         "   Incomplete: " & counts("incomplete") & _
-        "   Follow-up: " & counts("followup") & _
         "   Follow-ups due: " & FollowupsDueCount() & _
         "   Completed: " & counts("completed") & _
         "   Dropped: " & counts("dropped") & _

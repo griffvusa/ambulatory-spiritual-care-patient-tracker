@@ -311,11 +311,29 @@ End Sub
 ' "start of month to today" as this used to be).
 Public Sub SetDefaultDateRangeIfBlank()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    Dim firstOfMonth As String: firstOfMonth = Format(DateSerial(Year(Date), Month(Date), 1), "yyyy-mm-dd")
-    Dim lastOfMonth As String: lastOfMonth = Format(DateSerial(Year(Date), Month(Date) + 1, 0), "yyyy-mm-dd")
+    Dim firstOfMonth As String: firstOfMonth = Format(DateSerial(Year(Date), Month(Date), 1), "mm/dd/yyyy")
+    Dim lastOfMonth As String: lastOfMonth = Format(DateSerial(Year(Date), Month(Date) + 1, 0), "mm/dd/yyyy")
     If Trim(ws.Range("B3").Value & "") = "" Then ws.Range("B3").Value = firstOfMonth
     If Trim(ws.Range("D3").Value & "") = "" Then ws.Range("D3").Value = lastOfMonth
 End Sub
+
+' The shared From/To cells hold MM/DD/YYYY text; the report functions work in ISO.
+Private Function FromIso(ws As Worksheet) As String
+    FromIso = modUtils.ParseDate(CStr(ws.Range("B3").Value))
+End Function
+
+Private Function ToIso(ws As Worksheet) As String
+    ToIso = modUtils.ParseDate(CStr(ws.Range("D3").Value))
+End Function
+
+' False (after telling the user) if either shared date is missing/invalid.
+Private Function RangeIsValid(ws As Worksheet) As Boolean
+    If FromIso(ws) = "" Or ToIso(ws) = "" Then
+        MsgBox "Enter the report From and To dates as MM/DD/YYYY.", vbExclamation, "Reports"
+    Else
+        RangeIsValid = True
+    End If
+End Function
 
 ' Plain-range table write (NOT a ListObject -- see _build_reports_sheet's
 ' docstring for why: 4 stacked ListObjects on one sheet hit a real Excel
@@ -342,7 +360,11 @@ Private Sub WriteTableRows(ws As Worksheet, topLeftCell As String, numCols As Lo
         If r > topRow + bufferRows Then Exit For ' more rows than this section has room for -- stop rather than overflow into the next section
         Dim c As Long
         For c = 0 To UBound(fieldNames)
-            ws.Cells(r, topCol + c).Value = d(fieldNames(c))
+            If Right(fieldNames(c), 5) = "_date" Then
+                ws.Cells(r, topCol + c).Value = modUtils.FmtDate(CStr(d(fieldNames(c)) & ""))
+            Else
+                ws.Cells(r, topCol + c).Value = d(fieldNames(c))
+            End If
         Next c
         r = r + 1
     Next d
@@ -361,7 +383,8 @@ End Function
 
 Public Sub UI_RunReferralsBySource()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    Dim rows As Collection: Set rows = ReferralsBySource(CStr(ws.Range("B3").Value), CStr(ws.Range("D3").Value))
+    If Not RangeIsValid(ws) Then Exit Sub
+    Dim rows As Collection: Set rows = ReferralsBySource(FromIso(ws), ToIso(ws))
     Dim fields(2) As String: fields(0) = "source": fields(1) = "count": fields(2) = "percent"
     WriteTableRows ws, "A4", 3, rows, fields, 12 ' rows 5-16 -- next static content is the "First Appointments" label at A17
 
@@ -384,7 +407,8 @@ End Sub
 
 Public Sub UI_RunFirstAppointments()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    Dim rows As Collection: Set rows = FirstAppointments(CStr(ws.Range("B3").Value), CStr(ws.Range("D3").Value))
+    If Not RangeIsValid(ws) Then Exit Sub
+    Dim rows As Collection: Set rows = FirstAppointments(FromIso(ws), ToIso(ws))
     Dim fields(2) As String: fields(0) = "patient_name": fields(1) = "first_appt_date": fields(2) = "consultant_name"
     WriteTableRows ws, "A20", 3, rows, fields, 16 ' rows 21-36 -- next static content is the "Patients Dropped" label at A37
 
@@ -404,7 +428,8 @@ End Sub
 
 Public Sub UI_RunPatientsDropped()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    Dim rows As Collection: Set rows = PatientsDropped(CStr(ws.Range("B3").Value), CStr(ws.Range("D3").Value))
+    If Not RangeIsValid(ws) Then Exit Sub
+    Dim rows As Collection: Set rows = PatientsDropped(FromIso(ws), ToIso(ws))
     Dim fields(2) As String: fields(0) = "patient_name": fields(1) = "dropped_date": fields(2) = "changed_by_name"
     WriteTableRows ws, "A40", 3, rows, fields, 16 ' rows 41-56 -- next static content is the "SDAT Improvement" label at A57
 
@@ -424,7 +449,8 @@ End Sub
 
 Public Sub UI_RunSdatImprovement()
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    Dim rows As Collection: Set rows = SdatImprovement(CStr(ws.Range("B3").Value), CStr(ws.Range("D3").Value))
+    If Not RangeIsValid(ws) Then Exit Sub
+    Dim rows As Collection: Set rows = SdatImprovement(FromIso(ws), ToIso(ws))
     Dim fields(5) As String
     fields(0) = "patient_name": fields(1) = "begin_score": fields(2) = "begin_date"
     fields(3) = "end_score": fields(4) = "end_date": fields(5) = "pct_improvement"
@@ -539,11 +565,11 @@ End Sub
 ' so writing to these cells from VBA doesn't need an unprotect/reprotect dance.
 Private Sub PickDateIntoCell(addr As String)
     Dim ws As Worksheet: Set ws = modUtils.DataSheet("Reports")
-    CalendarPickerForm.InitialDate = Trim(CStr(ws.Range(addr).Value))
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(CStr(ws.Range(addr).Value))
     CalendarPickerForm.SelectedDate = ""
     CalendarPickerForm.Show
     If CalendarPickerForm.SelectedDate <> "" Then
-        ws.Range(addr).Value = CalendarPickerForm.SelectedDate
+        ws.Range(addr).Value = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
     End If
     Unload CalendarPickerForm
 End Sub

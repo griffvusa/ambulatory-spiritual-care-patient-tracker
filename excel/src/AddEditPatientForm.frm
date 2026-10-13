@@ -30,6 +30,7 @@ Private Sub UserForm_Activate()
     mLoaded = True
     AddBirthDateRow
     AddReferralRows
+    lblReferralDateHint.Caption = "(MM/DD/YYYY)"
     modUtils.PopulateLovCombo cboReferralSource, "referral_source", True
     modUtils.PopulateLovCombo cboReligion, "religion", True
     modUtils.PopulateLovCombo cboLanguage, "language", True, "English,Spanish"
@@ -41,11 +42,11 @@ Private Sub UserForm_Activate()
         txtFirstName.Text = p("first_name") & ""
         txtMiddleName.Text = p("middle_name") & ""
         txtPhone.Text = p("phone") & ""
-        mTxtDob.Text = p("date_of_birth") & ""
+        mTxtDob.Text = modUtils.FmtDate(p("date_of_birth") & "")
         mTxtFrom.Text = p("referral_from") & ""
         mTxtReason.Text = p("referral_reason") & ""
         mTxtPcp.Text = p("pcp_emailed") & ""
-        txtReferralDate.Text = p("date_of_referral") & ""
+        txtReferralDate.Text = modUtils.FmtDate(p("date_of_referral") & "")
         cboReferralSource.value = p("referral_source") & ""
         cboReligion.value = p("religion") & ""
         cboLanguage.value = p("language") & ""
@@ -53,7 +54,7 @@ Private Sub UserForm_Activate()
     Else
         Me.Caption = "Add Patient"
         ' Defaults to today; still editable by typing or via the calendar button.
-        txtReferralDate.Text = Format(Date, "yyyy-mm-dd")
+        txtReferralDate.Text = Format(Date, "mm/dd/yyyy")
     End If
 End Sub
 
@@ -153,10 +154,11 @@ End Function
 
 Private Sub UpdateAgeLabel()
     Dim s As String: s = Trim(mTxtDob.Text)
+    Dim iso As String: iso = modUtils.ParseDate(s)
     If s = "" Then
-        mLblAge.Caption = "(YYYY-MM-DD)"
-    ElseIf modUtils.AgeFromIsoDate(s) <> "" Then
-        mLblAge.Caption = "Age " & modUtils.AgeFromIsoDate(s)
+        mLblAge.Caption = "(MM/DD/YYYY)"
+    ElseIf iso <> "" And modUtils.AgeFromIsoDate(iso) <> "" Then
+        mLblAge.Caption = "Age " & modUtils.AgeFromIsoDate(iso)
     Else
         mLblAge.Caption = "Invalid date"
     End If
@@ -193,11 +195,11 @@ Private Sub txtPhone_Change()
 End Sub
 
 Private Sub btnPickDate_Click()
-    CalendarPickerForm.InitialDate = Trim(txtReferralDate.Text)
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(txtReferralDate.Text)
     CalendarPickerForm.SelectedDate = ""
     CalendarPickerForm.Show
     If CalendarPickerForm.SelectedDate <> "" Then
-        txtReferralDate.Text = CalendarPickerForm.SelectedDate
+        txtReferralDate.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
     End If
     Unload CalendarPickerForm
 End Sub
@@ -211,25 +213,32 @@ Private Sub btnSave_Click()
         ShowError "Referral date is required."
         Exit Sub
     End If
-    If Not modUtils.IsValidIsoDate(Trim(txtReferralDate.Text)) Then
-        ShowError "Referral date must be YYYY-MM-DD."
+    Dim referralIso As String: referralIso = modUtils.ParseDate(txtReferralDate.Text)
+    If referralIso = "" Then
+        ShowError "Referral date must be MM/DD/YYYY."
         Exit Sub
     End If
 
-    Dim dob As String: dob = Trim(mTxtDob.Text)
-    If dob <> "" And modUtils.AgeFromIsoDate(dob) = "" Then
-        ShowError "Birth date must be a past date as YYYY-MM-DD."
+    Dim dob As String: dob = modUtils.ParseDate(mTxtDob.Text)   ' ISO, or "" if blank/invalid
+    If Trim(mTxtDob.Text) <> "" And (dob = "" Or modUtils.AgeFromIsoDate(dob) = "") Then
+        ShowError "Birth date must be a past date as MM/DD/YYYY."
         Exit Sub
     End If
+
+    ' There's no status field on this form: a new patient's initial status date is
+    ' the referral date (today if that's in the future). Correct it afterwards
+    ' from the patient's status history (Edit Date) if needed.
+    Dim statusIso As String: statusIso = referralIso
+    If statusIso > modUtils.DateISO(Date) Then statusIso = modUtils.DateISO(Date)
 
     Dim referralSourceId As Long: referralSourceId = modUtils.LovIdForValue("referral_source", cboReferralSource.value)
     Dim religionId As Long: religionId = modUtils.LovIdForValue("religion", cboReligion.value)
     Dim languageId As Long: languageId = modUtils.LovIdForValue("language", cboLanguage.value)
 
     modPatients.Save PatientId, Trim(txtMrn.Text), Trim(txtLastName.Text), Trim(txtFirstName.Text), _
-        Trim(txtMiddleName.Text), Trim(txtPhone.Text), Trim(txtReferralDate.Text), _
+        Trim(txtMiddleName.Text), Trim(txtPhone.Text), referralIso, _
         referralSourceId, religionId, languageId, dob, _
-        Trim(mTxtFrom.Text), Trim(mTxtReason.Text), Trim(mTxtPcp.Text)
+        Trim(mTxtFrom.Text), Trim(mTxtReason.Text), Trim(mTxtPcp.Text), statusIso
     Unload Me
 End Sub
 

@@ -23,6 +23,18 @@ Private mLblReason As MSForms.Label
 Private mLblPcp As MSForms.Label
 Private mLblFollowup As MSForms.Label      ' follow-up date entry is added at runtime (see EnsureFollowupControls)
 Private mTxtFollowup As MSForms.TextBox
+Private WithEvents mBtnPickFollowup As MSForms.CommandButton
+Private WithEvents mBtnPickStatusDate As MSForms.CommandButton
+
+' Values as last loaded, so any Apply/Save button can tell what is pending.
+Private mSnapStatusLabel As String
+Private mSnapFollowup As String
+Private mSnapSdatBeginScore As String
+Private mSnapSdatBeginDate As String
+Private mSnapSdatEndScore As String
+Private mSnapSdatEndDate As String
+Private mSnapNotes As String
+Private WithEvents mBtnSaveFollowup As MSForms.CommandButton
 Private mLblStatusDate As MSForms.Label    ' status (effective) date entry, also added at runtime
 Private mTxtStatusDate As MSForms.TextBox
 Private WithEvents mBtnEditHistory As MSForms.CommandButton   ' "Edit Date" for a status-history entry, added at runtime
@@ -124,11 +136,11 @@ Private Sub LoadPatient()
     If dob = "" Then
         mLblDob.Caption = ""
     ElseIf modUtils.AgeFromIsoDate(dob) <> "" Then
-        mLblDob.Caption = dob & "  (Age " & modUtils.AgeFromIsoDate(dob) & ")"
+        mLblDob.Caption = modUtils.FmtDate(dob) & "  (Age " & modUtils.AgeFromIsoDate(dob) & ")"
     Else
-        mLblDob.Caption = dob
+        mLblDob.Caption = modUtils.FmtDate(dob)
     End If
-    lblReferralDate.Caption = p("date_of_referral") & ""
+    lblReferralDate.Caption = modUtils.FmtDate(p("date_of_referral") & "")
     lblReferralSource.Caption = p("referral_source") & ""
     lblReligion.Caption = p("religion") & ""
     lblLanguage.Caption = p("language") & ""
@@ -140,10 +152,7 @@ Private Sub LoadPatient()
 
     Dim currentStatus As String: currentStatus = p("current_status") & ""
     lblStatusBadge.Caption = modPatients.statusLabel(currentStatus)
-    mTxtFollowup.Text = p("followup_date") & ""
-    If currentStatus = "followup" And mTxtFollowup.Text <> "" Then
-        lblStatusBadge.Caption = lblStatusBadge.Caption & " " & mTxtFollowup.Text
-    End If
+    mTxtFollowup.Text = modUtils.FmtDate(p("followup_date") & "")
     lblStatusBadge.BackColor = StatusBadgeColor(currentStatus)
 
     ' ColumnWidths was fixed at 7 columns at design time (date/time/type/
@@ -158,7 +167,7 @@ Private Sub LoadPatient()
     For Each ap In modAppointments.GetForPatient(patientId)
         lstAppointments.AddItem ap("id")
         Dim apptIdx As Long: apptIdx = lstAppointments.ListCount - 1
-        lstAppointments.List(apptIdx, 1) = ap("date")
+        lstAppointments.List(apptIdx, 1) = modUtils.FmtDate(ap("date") & "")
         lstAppointments.List(apptIdx, 2) = ap("time")
         lstAppointments.List(apptIdx, 3) = ap("type")
         lstAppointments.List(apptIdx, 4) = ap("consultant_name")
@@ -175,7 +184,6 @@ Private Sub LoadPatient()
     If currentStatus <> "deleted" Then
         cboChangeStatus.value = modPatients.statusLabel(currentStatus)
     End If
-    UpdateFollowupVisibility
 
     lstStatusHistory.Clear
     lstStatusHistory.ColumnCount = 4                                  ' 4th column: hidden history id
@@ -184,14 +192,14 @@ Private Sub LoadPatient()
     For Each h In modPatients.GetStatusHistory(patientId)
         lstStatusHistory.AddItem h("status")
         lstStatusHistory.List(lstStatusHistory.ListCount - 1, 1) = h("changed_by_name")
-        lstStatusHistory.List(lstStatusHistory.ListCount - 1, 2) = h("changed_at")
+        lstStatusHistory.List(lstStatusHistory.ListCount - 1, 2) = modUtils.FmtDate(h("changed_at") & "")
         lstStatusHistory.List(lstStatusHistory.ListCount - 1, 3) = h("id")
     Next h
 
     txtSdatBeginScore.Text = p("sdat_begin_score") & ""
-    txtSdatBeginDate.Text = p("sdat_begin_date") & ""
+    txtSdatBeginDate.Text = modUtils.FmtDate(p("sdat_begin_date") & "")
     txtSdatEndScore.Text = p("sdat_end_score") & ""
-    txtSdatEndDate.Text = p("sdat_end_date") & ""
+    txtSdatEndDate.Text = modUtils.FmtDate(p("sdat_end_date") & "")
     If Trim(p("sdat_pct_improvement") & "") = "" Then
         lblSdatPctImprovement.Caption = ""
     Else
@@ -202,6 +210,14 @@ Private Sub LoadPatient()
     Dim isDeleted As Boolean: isDeleted = (currentStatus = "deleted")
     btnDeletePatient.Visible = Not isDeleted
     btnRestorePatient.Visible = isDeleted
+
+    mSnapStatusLabel = IIf(currentStatus <> "deleted", modPatients.statusLabel(currentStatus), "")
+    mSnapFollowup = Trim(mTxtFollowup.Text)
+    mSnapSdatBeginScore = Trim(txtSdatBeginScore.Text)
+    mSnapSdatBeginDate = Trim(txtSdatBeginDate.Text)
+    mSnapSdatEndScore = Trim(txtSdatEndScore.Text)
+    mSnapSdatEndDate = Trim(txtSdatEndDate.Text)
+    mSnapNotes = txtNotes.Text
 
     ' The appointments list snaps to whole rows once it's filled and can end up
     ' ~7pt taller than designed, running under the Add/Edit Appointment
@@ -220,7 +236,6 @@ Private Function StatusBadgeColor(currentStatus As String) As Long
         Case "active": StatusBadgeColor = RGB(&HB4, &HE5, &HA2)
         Case "active_ongoing": StatusBadgeColor = RGB(&H8F, &HD9, &HC9)
         Case "incomplete": StatusBadgeColor = RGB(&HF4, &HB1, &H83)
-        Case "followup": StatusBadgeColor = RGB(&HD9, &HB8, &HF0)
         Case "completed": StatusBadgeColor = RGB(&H9D, &HC3, &HE6)
         Case "dropped": StatusBadgeColor = RGB(&HFF, &HC7, &HCE)
         Case "on_hold": StatusBadgeColor = RGB(&HD9, &HD9, &HD9)
@@ -230,46 +245,99 @@ Private Function StatusBadgeColor(currentStatus As String) As Long
 End Function
 
 Private Sub btnApplyStatus_Click()
-    If Trim(cboChangeStatus.value) = "" Then Exit Sub
-    Dim newStatus As String: newStatus = modPatients.StatusInternal(cboChangeStatus.value)
-    Dim statusDate As String: statusDate = Trim(mTxtStatusDate.Text)
-    If statusDate <> "" Then
-        If Not modUtils.IsValidIsoDate(statusDate) Then
-            MsgBox "Enter the status date as YYYY-MM-DD, or leave it blank to use today.", _
-                vbExclamation, "Status date"
-            mTxtStatusDate.SetFocus
-            Exit Sub
+    SaveAllPending True
+End Sub
+
+' One save for the whole screen. Apply and every Save button on this form call
+' this, so an entry in any box is saved whichever of them is pressed -- nobody
+' has to press Apply AND Save. Everything is validated first; if anything is
+' invalid nothing is saved. alwaysApplyStatus is True for the Apply button
+' (it records the picked status even if it matches the current one, e.g. to
+' back-date it); the Save buttons only apply a status that was changed.
+Private Sub SaveAllPending(alwaysApplyStatus As Boolean)
+    Dim today As String: today = modUtils.DateISO(Date)
+
+    ' ── status change ──
+    Dim doStatus As Boolean
+    doStatus = (Trim(cboChangeStatus.value) <> "") And _
+               (alwaysApplyStatus Or cboChangeStatus.value <> mSnapStatusLabel)
+    Dim newStatus As String, statusDate As String
+    If doStatus Then
+        newStatus = modPatients.StatusInternal(cboChangeStatus.value)
+        statusDate = modUtils.ParseDate(mTxtStatusDate.Text)   ' ISO or ""
+        If Trim(mTxtStatusDate.Text) <> "" Then
+            If statusDate = "" Then
+                MsgBox "Enter the status date as MM/DD/YYYY, or leave it blank to use today.", _
+                    vbExclamation, "Status date"
+                mTxtStatusDate.SetFocus
+                Exit Sub
+            End If
+            If statusDate > today Then
+                MsgBox "The status date can't be in the future.", vbExclamation, "Status date"
+                mTxtStatusDate.SetFocus
+                Exit Sub
+            End If
+            If statusDate = today Then statusDate = ""   ' same as the default
         End If
-        If statusDate > modUtils.DateISO(Date) Then
-            MsgBox "The status date can't be in the future.", vbExclamation, "Status date"
-            mTxtStatusDate.SetFocus
-            Exit Sub
-        End If
-        If statusDate = modUtils.DateISO(Date) Then statusDate = ""   ' same as the default
     End If
 
-    Dim followupDate As String
-    If newStatus = "followup" Then
-        followupDate = Trim(mTxtFollowup.Text)
-        If followupDate = "" Or Not modUtils.IsValidIsoDate(followupDate) Then
-            MsgBox "Enter the follow-up date as YYYY-MM-DD.", vbExclamation, "Follow-up date"
+    ' ── follow-up date ──
+    Dim doFollowup As Boolean: doFollowup = (Trim(mTxtFollowup.Text) <> mSnapFollowup)
+    Dim followupIso As String
+    If doFollowup Then
+        followupIso = modUtils.ParseDate(mTxtFollowup.Text)
+        If Trim(mTxtFollowup.Text) <> "" And followupIso = "" Then
+            MsgBox "Enter the follow-up date as MM/DD/YYYY.", vbExclamation, "Follow-up date"
             mTxtFollowup.SetFocus
             Exit Sub
         End If
     End If
-    modPatients.ChangeStatus patientId, newStatus, followupDate, statusDate
-    mTxtStatusDate.Text = ""
+
+    ' ── SDAT ──
+    Dim doSdat As Boolean
+    doSdat = (Trim(txtSdatBeginScore.Text) <> mSnapSdatBeginScore) Or _
+             (Trim(txtSdatBeginDate.Text) <> mSnapSdatBeginDate) Or _
+             (Trim(txtSdatEndScore.Text) <> mSnapSdatEndScore) Or _
+             (Trim(txtSdatEndDate.Text) <> mSnapSdatEndDate)
+    Dim beginScore As Variant, endScore As Variant
+    If doSdat Then
+        beginScore = ParsedScore(txtSdatBeginScore.Text)
+        endScore = ParsedScore(txtSdatEndScore.Text)
+        If beginScore = "invalid" Or endScore = "invalid" Then
+            MsgBox "SDAT scores must be a whole number between 0 and 40, or blank.", vbExclamation
+            Exit Sub
+        End If
+        If Not modUtils.IsValidDateInput(txtSdatBeginDate.Text) Or Not modUtils.IsValidDateInput(txtSdatEndDate.Text) Then
+            MsgBox "SDAT dates must be MM/DD/YYYY, or blank.", vbExclamation
+            Exit Sub
+        End If
+    End If
+
+    ' ── notes ──
+    Dim doNotes As Boolean: doNotes = (txtNotes.Text <> mSnapNotes)
+    If doNotes And Len(txtNotes.Text) > 256 Then
+        MsgBox "Notes must be 256 characters or fewer.", vbExclamation
+        Exit Sub
+    End If
+
+    ' ── everything valid: save what changed ──
+    If doStatus Then
+        modPatients.ChangeStatus patientId, newStatus, statusDate
+        mTxtStatusDate.Text = Format(Date, "mm/dd/yyyy")   ' back to the default for the next change
+    End If
+    If doFollowup Then modPatients.SaveFollowupDate patientId, followupIso
+    If doSdat Then
+        modPatients.SaveSdat patientId, beginScore, modUtils.ParseDate(txtSdatBeginDate.Text), _
+            endScore, modUtils.ParseDate(txtSdatEndDate.Text)
+    End If
+    If doNotes Then modPatients.SaveNotes patientId, txtNotes.Text
     LoadPatient
 End Sub
 
-Private Sub cboChangeStatus_Change()
-    UpdateFollowupVisibility
-End Sub
-
-' Status-change date entry (always shown) and follow-up date entry (shown only
-' while "Follow-up" is the selected status), in two rows under the status
-' picker. Built in code so the form's binary layout doesn't change: everything
-' below the picker on the left and bottom panels slides down two rows.
+' Status-change date entry and the patient's follow-up date (with a calendar
+' button and its own Save), in two rows under the status picker. Built in code
+' so the form's binary layout doesn't change: everything below the picker on
+' the left and bottom panels slides down two rows.
 Private Sub EnsureFollowupControls()
     If Not mTxtFollowup Is Nothing Then Exit Sub
     Const ROW_H As Single = 22
@@ -287,12 +355,35 @@ Private Sub EnsureFollowupControls()
     Dim y As Single: y = edge + 4
     Set mLblStatusDate = AddStatusLabel("lblStatusDate", "Status date:", y + 2)
     Set mTxtStatusDate = AddStatusText("txtStatusDate", y)
-    mTxtStatusDate.ControlTipText = "Leave blank to use today. Enter YYYY-MM-DD to back-date this status change."
+    mTxtStatusDate.Text = Format(Date, "mm/dd/yyyy")   ' defaults to today; type or pick another date to back-date
+    mTxtStatusDate.ControlTipText = "Defaults to today. Type MM/DD/YYYY or use the calendar button to back-date this status change."
+    Set mBtnPickStatusDate = Me.Controls.Add("Forms.CommandButton.1", "btnPickStatusDate", True)
+    With mBtnPickStatusDate
+        .Caption = "..."
+        .Left = mTxtStatusDate.Left + mTxtStatusDate.Width + 2: .Top = y
+        .Width = 22: .Height = 18
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
 
     y = y + ROW_H
     Set mLblFollowup = AddStatusLabel("lblFollowupDate", "Follow-up:", y + 2)
     Set mTxtFollowup = AddStatusText("txtFollowupDate", y)
-    UpdateFollowupVisibility
+    mTxtFollowup.ControlTipText = "Follow-up date (MM/DD/YYYY). Clear it and Save to remove the follow-up."
+
+    Set mBtnPickFollowup = Me.Controls.Add("Forms.CommandButton.1", "btnPickFollowup", True)
+    With mBtnPickFollowup
+        .Caption = "..."
+        .Left = mTxtFollowup.Left + mTxtFollowup.Width + 2: .Top = y
+        .Width = 22: .Height = 18
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
+    Set mBtnSaveFollowup = Me.Controls.Add("Forms.CommandButton.1", "btnSaveFollowup", True)
+    With mBtnSaveFollowup
+        .Caption = "Save"
+        .Left = mBtnPickFollowup.Left + mBtnPickFollowup.Width + 4: .Top = y
+        .Width = 40: .Height = 18
+        .Font.Name = lblPhone.Font.Name: .Font.Size = lblPhone.Font.Size
+    End With
 
     Set mBtnEditHistory = Me.Controls.Add("Forms.CommandButton.1", "btnEditHistoryDate", True)
     With mBtnEditHistory
@@ -308,6 +399,31 @@ Private Sub mBtnEditHistory_Click()
     EditSelectedHistoryDate
 End Sub
 
+Private Sub mBtnPickStatusDate_Click()
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(mTxtStatusDate.Text)
+    CalendarPickerForm.SelectedDate = ""
+    CalendarPickerForm.Show
+    If CalendarPickerForm.SelectedDate <> "" Then
+        mTxtStatusDate.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
+    End If
+    Unload CalendarPickerForm
+End Sub
+
+Private Sub mBtnPickFollowup_Click()
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(mTxtFollowup.Text)
+    CalendarPickerForm.SelectedDate = ""
+    CalendarPickerForm.Show
+    If CalendarPickerForm.SelectedDate <> "" Then
+        mTxtFollowup.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
+    End If
+    Unload CalendarPickerForm
+End Sub
+
+' Saves the follow-up date (a blank box clears it) along with anything else pending.
+Private Sub mBtnSaveFollowup_Click()
+    SaveAllPending False
+End Sub
+
 Private Sub lstStatusHistory_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
     EditSelectedHistoryDate
 End Sub
@@ -321,20 +437,21 @@ Private Sub EditSelectedHistoryDate()
     Dim idx As Long: idx = lstStatusHistory.ListIndex
     Dim current As String: current = Left(CStr(lstStatusHistory.List(idx, 2)), 10)
     Dim answer As String
-    answer = InputBox("Date for the " & Chr(34) & lstStatusHistory.List(idx, 0) & Chr(34) & " status (YYYY-MM-DD):", _
+    answer = InputBox("Date for the " & Chr(34) & lstStatusHistory.List(idx, 0) & Chr(34) & " status (MM/DD/YYYY):", _
                       "Edit Status Date", current)
     answer = Trim(answer)
     If answer = "" Or answer = current Then Exit Sub   ' cancelled or unchanged
 
-    If Not modUtils.IsValidIsoDate(answer) Then
-        MsgBox "That isn't a valid date. Use YYYY-MM-DD.", vbExclamation, "Edit Status Date"
+    Dim answerIso As String: answerIso = modUtils.ParseDate(answer)
+    If answerIso = "" Then
+        MsgBox "That isn't a valid date. Use MM/DD/YYYY.", vbExclamation, "Edit Status Date"
         Exit Sub
     End If
-    If answer > modUtils.DateISO(Date) Then
+    If answerIso > modUtils.DateISO(Date) Then
         MsgBox "The status date can't be in the future.", vbExclamation, "Edit Status Date"
         Exit Sub
     End If
-    If modPatients.UpdateStatusHistoryDate(CLng(lstStatusHistory.List(idx, 3)), answer) Then
+    If modPatients.UpdateStatusHistoryDate(CLng(lstStatusHistory.List(idx, 3)), answerIso) Then
         LoadPatient
     Else
         MsgBox "Couldn't update that entry.", vbExclamation, "Edit Status Date"
@@ -365,13 +482,6 @@ Private Function AddStatusText(ctlName As String, topPos As Single) As MSForms.T
     Set AddStatusText = tb
 End Function
 
-Private Sub UpdateFollowupVisibility()
-    If mTxtFollowup Is Nothing Then Exit Sub
-    Dim show As Boolean: show = (cboChangeStatus.value = "Follow-up")
-    mLblFollowup.Visible = show
-    mTxtFollowup.Visible = show
-End Sub
-
 Private Sub btnEditPatient_Click()
     AddEditPatientForm.patientId = patientId
     AddEditPatientForm.Show
@@ -397,39 +507,27 @@ Private Sub btnEditAppointment_Click()
 End Sub
 
 Private Sub btnPickSdatBeginDate_Click()
-    CalendarPickerForm.InitialDate = Trim(txtSdatBeginDate.Text)
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(txtSdatBeginDate.Text)
     CalendarPickerForm.SelectedDate = ""
     CalendarPickerForm.Show
     If CalendarPickerForm.SelectedDate <> "" Then
-        txtSdatBeginDate.Text = CalendarPickerForm.SelectedDate
+        txtSdatBeginDate.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
     End If
     Unload CalendarPickerForm
 End Sub
 
 Private Sub btnPickSdatEndDate_Click()
-    CalendarPickerForm.InitialDate = Trim(txtSdatEndDate.Text)
+    CalendarPickerForm.InitialDate = modUtils.ParseDate(txtSdatEndDate.Text)
     CalendarPickerForm.SelectedDate = ""
     CalendarPickerForm.Show
     If CalendarPickerForm.SelectedDate <> "" Then
-        txtSdatEndDate.Text = CalendarPickerForm.SelectedDate
+        txtSdatEndDate.Text = modUtils.FmtDate(CalendarPickerForm.SelectedDate)
     End If
     Unload CalendarPickerForm
 End Sub
 
 Private Sub btnSaveSdat_Click()
-    Dim beginScore As Variant, endScore As Variant
-    beginScore = ParsedScore(txtSdatBeginScore.Text)
-    endScore = ParsedScore(txtSdatEndScore.Text)
-    If beginScore = "invalid" Or endScore = "invalid" Then
-        MsgBox "SDAT scores must be a whole number between 0 and 40, or blank.", vbExclamation
-        Exit Sub
-    End If
-    If Not modUtils.IsValidIsoDate(Trim(txtSdatBeginDate.Text)) Or Not modUtils.IsValidIsoDate(Trim(txtSdatEndDate.Text)) Then
-        MsgBox "SDAT dates must be YYYY-MM-DD, or blank.", vbExclamation
-        Exit Sub
-    End If
-    modPatients.SaveSdat patientId, beginScore, Trim(txtSdatBeginDate.Text), endScore, Trim(txtSdatEndDate.Text)
-    LoadPatient
+    SaveAllPending False
 End Sub
 
 ' Returns a Long 0-40, Empty for a blank string, or the string "invalid".
@@ -460,12 +558,7 @@ Private Function ParsedScore(s As String) As Variant
 End Function
 
 Private Sub btnSaveNotes_Click()
-    If Len(txtNotes.Text) > 256 Then
-        MsgBox "Notes must be 256 characters or fewer.", vbExclamation
-        Exit Sub
-    End If
-    modPatients.SaveNotes patientId, txtNotes.Text
-    LoadPatient
+    SaveAllPending False
 End Sub
 
 Private Sub btnDeletePatient_Click()

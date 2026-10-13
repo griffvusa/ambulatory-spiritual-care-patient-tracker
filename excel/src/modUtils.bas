@@ -58,6 +58,68 @@ Public Function DateISO(d As Date) As String
     DateISO = Format(d, "yyyy-mm-dd")
 End Function
 
+' ── User-facing date format: MM/DD/YYYY. Storage stays ISO (yyyy-mm-dd) so
+' sorting, comparisons, reports and Electron import/export are unaffected; only
+' what people see and type changes. ───────────────────────────────────────────
+' ISO date (or ISO timestamp) -> MM/DD/YYYY (time-of-day kept). Anything that
+' isn't ISO (including "") is returned unchanged.
+Public Function FmtDate(iso As String) As String
+    Dim s As String: s = Trim(iso)
+    If Len(s) >= 10 And Mid(s, 5, 1) = "-" And Mid(s, 8, 1) = "-" Then
+        FmtDate = Mid(s, 6, 2) & "/" & Mid(s, 9, 2) & "/" & Left(s, 4) & Mid(s, 11)
+    Else
+        FmtDate = s
+    End If
+End Function
+
+Private Function IsDigits(s As String) As Boolean
+    Dim i As Long
+    If Len(s) = 0 Then Exit Function
+    For i = 1 To Len(s)
+        If Mid(s, i, 1) < "0" Or Mid(s, i, 1) > "9" Then Exit Function
+    Next i
+    IsDigits = True
+End Function
+
+' User-entered date -> ISO. Accepts MM/DD/YYYY, M/D/YYYY, MMDDYYYY (8 digits),
+' MM-DD-YYYY, MM.DD.YYYY and (passthrough) YYYY-MM-DD. Returns "" if the text
+' is blank or isn't a real calendar date.
+Public Function ParseDate(text As String) As String
+    Dim s As String: s = Trim(text)
+    If s = "" Then Exit Function
+    If Len(s) = 10 And Mid(s, 5, 1) = "-" And Mid(s, 8, 1) = "-" Then
+        If IsValidIsoDate(s) Then ParseDate = s
+        Exit Function
+    End If
+
+    Dim norm As String: norm = Replace(Replace(s, "-", "/"), ".", "/")
+    Dim m As String, d As String, y As String
+    If InStr(norm, "/") > 0 Then
+        Dim parts() As String: parts = Split(norm, "/")
+        If UBound(parts) <> 2 Then Exit Function
+        m = Trim(parts(0)): d = Trim(parts(1)): y = Trim(parts(2))
+    ElseIf Len(norm) = 8 Then
+        m = Left(norm, 2): d = Mid(norm, 3, 2): y = Mid(norm, 5, 4)
+    Else
+        Exit Function
+    End If
+    If Not (IsDigits(m) And IsDigits(d) And IsDigits(y)) Then Exit Function
+    If Len(y) <> 4 Or Len(m) > 2 Or Len(d) > 2 Then Exit Function
+
+    Dim iso As String
+    iso = y & "-" & Format(CLng(m), "00") & "-" & Format(CLng(d), "00")
+    If IsValidIsoDate(iso) Then ParseDate = iso
+End Function
+
+' True if text is blank or a valid date in any format ParseDate accepts.
+Public Function IsValidDateInput(text As String) As Boolean
+    If Trim(text) = "" Then
+        IsValidDateInput = True
+    Else
+        IsValidDateInput = (ParseDate(text) <> "")
+    End If
+End Function
+
 ' Returns the column index (1-based) for a header name in row 1.
 ' Returns 0 if the column is not found.
 Public Function ColIndex(ws As Worksheet, colName As String) As Long
