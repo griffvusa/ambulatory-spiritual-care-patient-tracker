@@ -202,6 +202,13 @@ Private Sub LoadPatient()
     Dim isDeleted As Boolean: isDeleted = (currentStatus = "deleted")
     btnDeletePatient.Visible = Not isDeleted
     btnRestorePatient.Visible = isDeleted
+
+    ' The appointments list snaps to whole rows once it's filled and can end up
+    ' ~7pt taller than designed, running under the Add/Edit Appointment
+    ' buttons; keep the buttons just below wherever it actually ends.
+    Dim apptBtnTop As Single: apptBtnTop = lstAppointments.Top + lstAppointments.Height + 4
+    btnAddAppointment.Top = apptBtnTop
+    btnEditAppointment.Top = apptBtnTop
 End Sub
 
 ' BackColor uses the same BGR-packed OLE_COLOR format as VBA's RGB() function,
