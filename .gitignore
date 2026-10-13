@@ -18,3 +18,7 @@ excel/tests/__pycache__/
 # Allow excel/dist/ even though dist/ is globally ignored
 !excel/dist/
 !excel/dist/**
+
+# Working data workbooks and Excel lock files -- never commit patient data
+excel/dist/*-new.xlsm
+excel/dist/~$*
