@@ -9,7 +9,7 @@ import sys
 # _data_settings (see SEED_SETTINGS) so it's discoverable from inside the file
 # too. Not load-bearing for modUpgrade's in-app import -- that merges by
 # column name and self-migrates regardless of what version a file claims.
-EXCEL_BUILD_VERSION = 2
+EXCEL_BUILD_VERSION = 3
 
 # ─── Sheet definitions ────────────────────────────────────────────────────────
 

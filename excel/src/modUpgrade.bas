@@ -98,7 +98,7 @@ Private Function ReleaseNotesForVersion(version As String) As String
                 "one -- if every admin is ever locked out (Admin locked out? Use " & _
                 "recovery code)."
             ReleaseNotesForVersion = notes
-        Case "2"
+        Case "2", "3"
             ReleaseNotesForVersion = "- On the patient detail screen, Apply and every Save button save " & _
                 "everything you've entered -- you no longer need to press both." & vbCrLf & vbCrLf & _
                 "- Patients now have a birth date (Add/Edit Patient), and their " & _
